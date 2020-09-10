@@ -1,4 +1,4 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigInt, Bytes } from "@graphprotocol/graph-ts"
 import {
   Contract,
   LogCanExecFailed,
@@ -28,11 +28,12 @@ import {
   LogTaskSubmitted,
   OwnershipTransferred
 } from "../generated/Contract/Contract"
-import { ExampleEntity } from "../generated/schema"
+import { ExampleEntity, Provider, Executor } from "../generated/schema"
 
 export function handleLogCanExecFailed(event: LogCanExecFailed): void {
   // Entities can be loaded from the store using a string ID; this ID
   // needs to be unique across all entities of the same type
+  let contract = Contract.bind(event.address)
   let entity = ExampleEntity.load(event.transaction.from.toHex())
 
   // Entities only exist after they have been saved to the store;
@@ -185,6 +186,58 @@ export function handleLogTaskSpecUnprovided(
   event: LogTaskSpecUnprovided
 ): void {}
 
-export function handleLogTaskSubmitted(event: LogTaskSubmitted): void {}
+export function handleLogTaskSubmitted(event: LogTaskSubmitted): void {
+  let contract = Contract.bind(event.address)
+  let providerAddr = event.params.taskReceipt.provider.addr
+  let provider = Provider.load(providerAddr.toHex())
+
+  let executorAddr =  contract.executorByProvider(providerAddr)
+  let executor = Executor.load(executorAddr.toHex())
+
+  if (provider == null) {
+    provider = new Provider(providerAddr.toHex())
+    this.addIfProviderDidntHaveUserProxy(provider, event.params.taskReceipt.userProxy)
+  }
+
+  if (executor = null) {
+    executor = new Executor(executorAddr.toHex())
+    this.addIfExecutorDidntHaveProvider(executor, providerAddr)
+  }
+
+  provider.save();
+  executor.save();
+}
+
+function addIfProviderDidntHaveUserProxy(provider: Provider|null, userProxy: Bytes): void {
+  var findUser = false
+  provider.users.forEach((user) => 
+    {
+    if (user===userProxy) {
+      findUser = true;
+      return;
+    }
+  }
+  );
+  
+  if(!findUser) {
+    provider.users.push(userProxy)
+  }
+}
+
+function addIfExecutorDidntHaveProvider(executor : Executor|null, provider: Bytes): void {
+  var findProvider = false
+  executor.providers.forEach((p) => 
+    {
+    if (p===provider) {
+      findProvider = true;
+      return;
+    }
+  }
+  );
+  
+  if(!findProvider) {
+    executor.providers.push(provider)
+  }
+}
 
 export function handleOwnershipTransferred(event: OwnershipTransferred): void {}
